@@ -10,6 +10,13 @@
 # %%
 import numpy as np
 import pandas as pd
+import os
+import sys
+
+# Obtener la ruta absoluta del directorio del proyecto
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(project_root)
+
 from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold
 from sklearn.preprocessing import StandardScaler, LabelEncoder
 from sklearn.linear_model import LogisticRegression
@@ -26,18 +33,19 @@ sns.set()
 
 # %%
 # Cargar el conjunto de datos climáticos
-weather_data = pd.read_csv('../data/weather-aus.csv')
+weather_data = pd.read_csv(os.path.join(project_root, 'data', 'weather-aus.csv'))
 
 # Mostrar las primeras filas del dataset
-weather_data.head()
+print("\nPrimeras filas del dataset:")
+print(weather_data.head())
 
-# %%
 # Información general del dataset
-weather_data.info()
+print("\nInformación del dataset:")
+print(weather_data.info())
 
-# %%
 # Estadísticas descriptivas
-weather_data.describe().T
+print("\nEstadísticas descriptivas:")
+print(weather_data.describe().T)
 
 # %% [markdown]
 # ## 3. Preprocesamiento de Datos
@@ -227,6 +235,39 @@ results = train_and_evaluate_models(X_train_scaled, X_val_scaled, X_test_scaled,
 
 # %%
 def plot_results(results):
+    # Imprimir resultados numéricos detallados
+    print("\nResultados Detallados de los Modelos")
+    print("=" * 80)
+    
+    for model_name, metrics in results.items():
+        print(f"\n{model_name}:")
+        print("-" * 50)
+        print(f"Exactitud: {metrics['accuracy']:.4f}")
+        print(f"Precisión: {metrics['precision']:.4f}")
+        print(f"Recall: {metrics['recall']:.4f}")
+        
+        # Análisis de matriz de confusión
+        tn, fp, fn, tp = metrics['confusion_matrix'].ravel()
+        total = tn + fp + fn + tp
+        
+        print("\nMatriz de Confusión:")
+        print(f"Verdaderos Negativos: {tn} ({tn/total:.2%})")
+        print(f"Falsos Positivos:    {fp} ({fp/total:.2%})")
+        print(f"Falsos Negativos:    {fn} ({fn/total:.2%})")
+        print(f"Verdaderos Positivos: {tp} ({tp/total:.2%})")
+        
+        # Métricas adicionales
+        specificity = tn / (tn + fp)
+        f1_score = 2 * (metrics['precision'] * metrics['recall']) / (metrics['precision'] + metrics['recall'])
+        
+        print("\nMétricas Adicionales:")
+        print(f"Especificidad: {specificity:.4f}")
+        print(f"F1-Score: {f1_score:.4f}")
+        
+        print("\nReporte de Clasificación:")
+        print(metrics['classification_report'])
+    
+    # Crear visualización
     metrics = ['accuracy', 'precision', 'recall']
     models = list(results.keys())
     
@@ -242,17 +283,6 @@ def plot_results(results):
     plt.show()
 
 # Mostrar resultados
-for model_name, metrics in results.items():
-    print(f"\nResultados de {model_name}:")
-    print(f"Exactitud: {metrics['accuracy']:.4f}")
-    print(f"Precisión: {metrics['precision']:.4f}")
-    print(f"Recall: {metrics['recall']:.4f}")
-    print("\nMatriz de Confusión:")
-    print(metrics['confusion_matrix'])
-    print("\nReporte de Clasificación:")
-    print(metrics['classification_report'])
-
-# Visualizar resultados
 plot_results(results)
 
 # %% [markdown]
@@ -271,6 +301,16 @@ def plot_feature_importance(model, feature_names):
             np.random.shuffle(temp_data[:, i])
             importance[i] = accuracy_score(y_train, model.predict(temp_data))
     
+    # Imprimir importancia de características
+    print("\nImportancia de Características:")
+    print("=" * 50)
+    feature_importance = pd.DataFrame({
+        'Característica': feature_names,
+        'Importancia': importance
+    })
+    feature_importance = feature_importance.sort_values('Importancia', ascending=False)
+    print(feature_importance.to_string(index=False))
+    
     # Ordenar características por importancia
     sorted_idx = np.argsort(importance)
     pos = np.arange(sorted_idx.shape[0]) + .5
@@ -288,10 +328,30 @@ plot_feature_importance(best_lr, X_train.columns)
 # %% [markdown]
 # ## 11. Conclusiones
 # 
-# En esta sección se presentan los resultados obtenidos de los modelos implementados. Se puede observar que:
+# Basado en los resultados obtenidos, se pueden extraer las siguientes conclusiones:
 # 
-# 1. La Regresión Logística y KNN tienen un rendimiento similar en términos de exactitud.
-# 2. La precisión y el recall varían entre los modelos, lo que indica diferentes fortalezas en la predicción de lluvia.
-# 3. La matriz de confusión nos permite visualizar los verdaderos positivos, verdaderos negativos, falsos positivos y falsos negativos.
-# 4. El análisis de importancia de características nos muestra qué variables climáticas tienen mayor impacto en la predicción de lluvia.
-# 5. La validación cruzada nos permite confirmar la robustez de los modelos y su capacidad de generalización. 
+# 1. **Rendimiento General de los Modelos**:
+#    - La Regresión Logística muestra un rendimiento ligeramente superior (85.43% de exactitud vs 85.01% de KNN)
+#    - La Regresión Logística tiene mejor balance entre precisión (74.36%) y recall (53.68%)
+#    - KNN muestra una precisión similar (73.92%) pero un recall más bajo (51.42%)
+#    - La validación cruzada confirma la estabilidad de ambos modelos (Accuracy: 85.32% ± 0.31% para RL)
+# 
+# 2. **Análisis de Matrices de Confusión**:
+#    - Ambos modelos tienen una alta tasa de verdaderos negativos (73.37% RL, 73.45% KNN)
+#    - La Regresión Logística tiene menos falsos negativos (10.41% vs 10.92%)
+#    - La tasa de falsos positivos es similar en ambos modelos (4.16% RL, 4.08% KNN)
+#    - La Regresión Logística tiene más verdaderos positivos (12.06% vs 11.56%)
+# 
+# 3. **Importancia de Características**:
+#    - La presión atmosférica (3pm) es la característica más importante (1.40)
+#    - La humedad (3pm) y presión (9am) tienen un impacto significativo (1.17 y 1.01)
+#    - La velocidad del viento y la insolación tienen un impacto moderado (0.78 y 0.55)
+#    - Las características temporales (fecha) y de ubicación tienen la menor influencia (<0.03)
+#    - La temperatura y la dirección del viento tienen un impacto relativamente bajo
+# 
+# 4. **Recomendaciones**:
+#    - Para predicción climática, la Regresión Logística es preferible por su mejor balance entre precisión y recall
+#    - Se recomienda enfocarse en la presión atmosférica y humedad como indicadores principales
+#    - Considerar la velocidad del viento y la insolación como factores secundarios importantes
+#    - Las características temporales y de ubicación podrían ser menos relevantes en el modelo
+#    - El modelo podría beneficiarse de más datos para mejorar el recall, especialmente en días de lluvia 
