@@ -34,19 +34,19 @@ Este proyecto tiene como objetivo aplicar técnicas de clasificación de datos u
 - [x] Análisis de importancia de características para clima
 - [x] Implementación de validación cruzada para diabetes
 - [x] Implementación de validación cruzada para clima
+- [x] Comparación detallada de modelos
 
 ### 🚧 En Progreso
 - [ ] Creación del informe LaTeX
 
 ### 📝 Pendiente
-- [ ] Comparación detallada de modelos
 - [ ] Redacción del informe final
 - [ ] Presentación de resultados
 
 ## 📈 Próximos Pasos
-1. Realizar una comparación detallada de los modelos
-2. Comenzar la redacción del informe LaTeX
-3. Preparar la presentación de resultados
+1. Comenzar la redacción del informe LaTeX
+2. Preparar la presentación de resultados
+3. Revisión final del proyecto
 
 ## 🔧 Requisitos
 Los requisitos del proyecto se encuentran en `requirements.txt`
