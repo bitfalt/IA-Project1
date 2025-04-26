@@ -17,7 +17,7 @@ import sys
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(project_root)
 
-from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold
+from sklearn.model_selection import train_test_split, GridSearchCV, cross_val_score, StratifiedKFold, learning_curve
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier
@@ -70,30 +70,26 @@ def split_data(data, target_col='Outcome'):
     X = data.drop(target_col, axis=1)
     y = data[target_col]
     
-    # Primera división: 70% entrenamiento, 30% temporal
-    X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.3, random_state=42)
+    # División en training (80%) y testing (20%)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
     
-    # Segunda división: 15% validación, 15% prueba
-    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
-    
-    return X_train, X_val, X_test, y_train, y_val, y_test
+    return X_train, X_test, y_train, y_test
 
 # Dividir los datos
-X_train, X_val, X_test, y_train, y_val, y_test = split_data(processed_data)
+X_train, X_test, y_train, y_test = split_data(processed_data)
 
 # %% [markdown]
 # ## 5. Escalado de Características
 
 # %%
-def scale_data(X_train, X_val, X_test):
+def scale_data(X_train, X_test):
     scaler = StandardScaler()
     X_train_scaled = scaler.fit_transform(X_train)
-    X_val_scaled = scaler.transform(X_val)
     X_test_scaled = scaler.transform(X_test)
-    return X_train_scaled, X_val_scaled, X_test_scaled
+    return X_train_scaled, X_test_scaled
 
 # Escalar los datos
-X_train_scaled, X_val_scaled, X_test_scaled = scale_data(X_train, X_val, X_test)
+X_train_scaled, X_test_scaled = scale_data(X_train, X_test)
 
 # %% [markdown]
 # ## 6. Optimización de Hiperparámetros
@@ -196,7 +192,7 @@ for model_name, metrics in cv_results.items():
 # ## 8. Entrenamiento y Evaluación de Modelos
 
 # %%
-def train_and_evaluate_models(X_train, X_val, X_test, y_train, y_val, y_test):
+def train_and_evaluate_models(X_train, X_test, y_train, y_test):
     # Entrenar modelos con mejores hiperparámetros
     lr_model = best_lr
     knn_model = best_knn
@@ -221,10 +217,52 @@ def train_and_evaluate_models(X_train, X_val, X_test, y_train, y_val, y_test):
     return results
 
 # Entrenar y evaluar modelos
-results = train_and_evaluate_models(X_train_scaled, X_val_scaled, X_test_scaled, y_train, y_val, y_test)
+results = train_and_evaluate_models(X_train_scaled, X_test_scaled, y_train, y_test)
 
 # %% [markdown]
-# ## 9. Visualización de Resultados
+# ## 9. Curvas de Aprendizaje y Comportamiento
+
+# %%
+def plot_learning_curves(model, X, y, title):
+    train_sizes, train_scores, test_scores = learning_curve(
+        model, X, y, cv=5, n_jobs=-1,
+        train_sizes=np.linspace(0.1, 1.0, 10),
+        scoring='accuracy'
+    )
+    
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+    
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_sizes, train_mean, label='Training score', color='blue')
+    plt.plot(train_sizes, test_mean, label='Cross-validation score', color='red')
+    
+    plt.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color='blue')
+    plt.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color='red')
+    
+    plt.title(f'Curva de Aprendizaje - {title}')
+    plt.xlabel('Tamaño del Conjunto de Entrenamiento')
+    plt.ylabel('Accuracy')
+    plt.legend(loc='best')
+    plt.grid(True)
+    plt.show()
+    
+    # Imprimir resultados numéricos
+    print(f"\nResultados de Curva de Aprendizaje - {title}:")
+    print("=" * 50)
+    for i, size in enumerate(train_sizes):
+        print(f"\nTamaño de Entrenamiento: {int(size)} muestras")
+        print(f"Training Score: {train_mean[i]:.4f} ± {train_std[i]:.4f}")
+        print(f"CV Score: {test_mean[i]:.4f} ± {test_std[i]:.4f}")
+
+# Graficar curvas de aprendizaje para ambos modelos
+plot_learning_curves(best_lr, X_train_scaled, y_train, 'Regresión Logística')
+plot_learning_curves(best_knn, X_train_scaled, y_train, 'KNN')
+
+# %% [markdown]
+# ## 10. Visualización de Resultados
 
 # %%
 def plot_results(results):
@@ -279,7 +317,7 @@ def plot_results(results):
 plot_results(results)
 
 # %% [markdown]
-# ## 10. Análisis de Importancia de Características
+# ## 11. Análisis de Importancia de Características
 
 # %%
 def plot_feature_importance(model, feature_names):
@@ -319,7 +357,7 @@ def plot_feature_importance(model, feature_names):
 plot_feature_importance(best_lr, X_train.columns)
 
 # %% [markdown]
-# ## 11. Conclusiones
+# ## 12. Conclusiones
 # 
 # Basado en los resultados obtenidos, se pueden extraer las siguientes conclusiones:
 # 
@@ -348,3 +386,4 @@ plot_feature_importance(best_lr, X_train.columns)
 #    - Considerar la edad como un factor de riesgo moderado
 #    - La insulina y el grosor de la piel podrían ser menos relevantes en el diagnóstico
 #    - El modelo podría beneficiarse de más datos para mejorar el recall, especialmente en casos positivos 
+# %%
