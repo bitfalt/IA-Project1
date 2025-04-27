@@ -16,6 +16,7 @@ Este proyecto tiene como objetivo aplicar técnicas de clasificación de datos u
 ```
 .
 ├── data/                  # Datasets
+├── logs/                  # Registros de experimentos
 ├── notebooks/             # Notebooks de exploración
 ├── scripts/              # Scripts de modelado
 └── report/               # Informe LaTeX

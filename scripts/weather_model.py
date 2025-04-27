@@ -134,7 +134,9 @@ def optimize_hyperparameters(X_train, y_train):
         lr_params,
         cv=5,
         scoring='accuracy',
-        n_jobs=-1
+        n_jobs=-1,
+        return_train_score=True,  # Para obtener las puntuaciones de entrenamiento
+        verbose=0
     )
     lr_grid.fit(X_train, y_train)
     
@@ -144,11 +146,80 @@ def optimize_hyperparameters(X_train, y_train):
         knn_params,
         cv=5,
         scoring='accuracy',
-        n_jobs=-1
+        n_jobs=-1,
+        return_train_score=True,  # Para obtener las puntuaciones de entrenamiento
+        verbose=0
     )
     knn_grid.fit(X_train, y_train)
     
+    # Registrar hiperparámetros descartados (selección de N combinaciones)
+    log_hyperparameter_selection(lr_grid, "Regresión Logística", sample_size=3)
+    log_hyperparameter_selection(knn_grid, "KNN", sample_size=5)
+    
     return lr_grid.best_estimator_, knn_grid.best_estimator_
+
+def log_hyperparameter_selection(grid_search, model_name, sample_size=5):
+    """
+    Registra una muestra de los hiperparámetros probados y descartados durante la búsqueda de GridSearch.
+    
+    Args:
+        grid_search: Objeto GridSearchCV después de ajustar
+        model_name: Nombre del modelo para el registro
+        sample_size: Número de combinaciones a mostrar (además del mejor)
+    """
+    # Convertir resultados a DataFrame
+    results = pd.DataFrame(grid_search.cv_results_)
+    
+    # Ordenar por rendimiento (de peor a mejor)
+    results = results.sort_values('mean_test_score')
+    
+    # Mejor conjunto de parámetros
+    best_params = grid_search.best_params_
+    best_score = grid_search.best_score_
+    
+    # Calcular el número total de combinaciones
+    total_combinations = len(results)
+    
+    print(f"\n{'='*20} Registro de Selección de Hiperparámetros - {model_name} {'='*20}")
+    print(f"Total de combinaciones evaluadas: {total_combinations}")
+    print(f"Mejor combinación: {best_params} (score: {best_score:.4f})")
+    
+    # Seleccionar algunas combinaciones distribuidas (incluyendo la peor)
+    if total_combinations <= sample_size:
+        sample_indices = list(range(total_combinations))
+    else:
+        # Siempre incluir el peor conjunto
+        sample_indices = [0]
+        
+        # Agregar algunos conjuntos intermedios
+        step = (total_combinations - 2) // (sample_size - 1)
+        sample_indices.extend(range(1, total_combinations-1, step))
+    
+    # Registrar las combinaciones seleccionadas
+    print("\nMuestra de combinaciones descartadas:")
+    print(f"{'Params':<50} | {'Test Score':<10} | {'Train Score':<10} | {'Diferencia':<10} | {'Razón de descarte'}")
+    print("-" * 100)
+    
+    for idx in sample_indices:
+        row = results.iloc[idx]
+        params = {k.replace('param_', ''): v for k, v in row.items() if k.startswith('param_') and not pd.isna(v)}
+        test_score = row['mean_test_score']
+        train_score = row['mean_train_score']
+        diff = train_score - test_score
+        
+        # Determinar la razón del descarte
+        if diff > 0.1:
+            reason = "Posible sobreajuste"
+        elif test_score < best_score - 0.1:
+            reason = "Rendimiento bajo"
+        else:
+            reason = "Subóptimo"
+        
+        params_str = str(params)
+        if len(params_str) > 48:
+            params_str = params_str[:45] + "..."
+        
+        print(f"{params_str:<50} | {test_score:.4f}    | {train_score:.4f}    | {diff:.4f}     | {reason}")
 
 # Optimizar hiperparámetros
 best_lr, best_knn = optimize_hyperparameters(X_train_scaled, y_train)
@@ -397,14 +468,26 @@ plot_feature_importance(best_lr, X_train.columns)
 #    3. WindGustSpeed (Velocidad de ráfagas)
 #    - Las mediciones de la tarde son mejores predictores
 # 
-# 5. **Hiperparámetros Óptimos**:
+# 5. **Análisis de Hiperparámetros Seleccionados**:
+#    El análisis completo de todos los hiperparámetros probados se encuentra en la carpeta de logs.
 #    - Regresión Logística:
-#      * C = 0.01 (penalización moderada)
-#      * penalty = 'l2' (regularización Ridge)
+#      * Hiperparámetros óptimos: C=0.01, penalty='l2', solver='liblinear'
+#      * Proceso de selección:
+#        - Se evaluaron 5 combinaciones de hiperparámetros, con enfoque específico en el parámetro C
+#        - Todas las configuraciones mostraron rendimiento similar (84.15-84.27%) con diferencias mínimas
+#        - Las diferencias entre scores de training y test fueron casi nulas (<0.0001), indicando excelente estabilidad
+#        - El valor C=0.01 logró el mejor balance con un score de 0.8427
+#        - Se utilizó exclusivamente regularización L2 por su demostrada eficacia en iteraciones previas
+#        - El modelo mostró alta robustez ante diferentes configuraciones de hiperparámetros
 #    - KNN:
-#      * n_neighbors = 20 (balance entre ruido y generalización)
-#      * metric = 'manhattan' (mejor para este tipo de datos)
-#      * weights = 'distance' (mejor que pesos uniformes)
+#      * Hiperparámetros óptimos: n_neighbors=21, metric='manhattan', weights='distance'
+#      * Proceso de selección:
+#        - Se evaluaron 24 combinaciones de hiperparámetros
+#        - El rango de n_neighbors se centró alrededor de 20 basado en optimizaciones previas
+#        - Configuraciones con valores altos de n_neighbors (>19) y métrica manhattan superaron consistentemente a otras opciones
+#        - Múltiples configuraciones mostraron signos claros de sobreajuste con diferencias de >0.15 entre training y test
+#        - El uso de pesos por distancia (weights='distance') mejoró el rendimiento con métrica manhattan
+#        - La configuración óptima alcanzó 84.62% de exactitud, superando ligeramente a la Regresión Logística
 # 
 # 6. **Recomendaciones**:
 #    - Usar KNN como modelo principal

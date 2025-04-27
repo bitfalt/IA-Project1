@@ -116,7 +116,9 @@ def optimize_hyperparameters(X_train, y_train):
         lr_params,
         cv=5,
         scoring='accuracy',
-        n_jobs=-1
+        n_jobs=-1,
+        return_train_score=True,  # Para obtener las puntuaciones de entrenamiento
+        verbose=0
     )
     lr_grid.fit(X_train, y_train)
     
@@ -126,11 +128,94 @@ def optimize_hyperparameters(X_train, y_train):
         knn_params,
         cv=5,
         scoring='accuracy',
-        n_jobs=-1
+        n_jobs=-1,
+        return_train_score=True,  # Para obtener las puntuaciones de entrenamiento
+        verbose=0
     )
     knn_grid.fit(X_train, y_train)
     
+    # Registrar hiperparámetros descartados (selección de N combinaciones)
+    log_hyperparameter_selection(lr_grid, "Regresión Logística", sample_size=5)
+    log_hyperparameter_selection(knn_grid, "KNN", sample_size=8)
+    
     return lr_grid.best_estimator_, knn_grid.best_estimator_
+
+def log_hyperparameter_selection(grid_search, model_name, sample_size=5):
+    """
+    Registra una muestra de los hiperparámetros probados y descartados durante la búsqueda de GridSearch.
+    
+    Args:
+        grid_search: Objeto GridSearchCV después de ajustar
+        model_name: Nombre del modelo para el registro
+        sample_size: Número de combinaciones a mostrar (además del mejor)
+    """
+    # Convertir resultados a DataFrame
+    results = pd.DataFrame(grid_search.cv_results_)
+    
+    # Ordenar por rendimiento (de peor a mejor)
+    results = results.sort_values('mean_test_score')
+    
+    # Mejor conjunto de parámetros
+    best_params = grid_search.best_params_
+    best_score = grid_search.best_score_
+    
+    # Calcular el número total de combinaciones
+    total_combinations = len(results)
+    
+    print(f"\n{'='*20} Registro de Selección de Hiperparámetros - {model_name} {'='*20}")
+    print(f"Total de combinaciones evaluadas: {total_combinations}")
+    print(f"Mejor combinación: {best_params} (score: {best_score:.4f})")
+    
+    # Seleccionar algunas combinaciones distribuidas (incluyendo la peor)
+    if total_combinations <= sample_size:
+        sample_indices = list(range(total_combinations))
+    else:
+        # Siempre incluir el peor conjunto
+        sample_indices = [0]
+        
+        # Agregar algunos conjuntos intermedios
+        step = (total_combinations - 2) // (sample_size - 1)
+        sample_indices.extend(range(1, total_combinations-1, step))
+    
+    # Registrar las combinaciones seleccionadas
+    print("\nMuestra de combinaciones descartadas:")
+    print(f"{'Params':<50} | {'Test Score':<10} | {'Train Score':<10} | {'Diferencia':<10} | {'Razón de descarte'}")
+    print("-" * 100)
+    
+    for idx in sample_indices:
+        row = results.iloc[idx]
+        params = {k.replace('param_', ''): v for k, v in row.items() if k.startswith('param_') and not pd.isna(v)}
+        test_score = row['mean_test_score']
+        train_score = row['mean_train_score']
+        diff = train_score - test_score
+        
+        # Determinar la razón del descarte
+        if diff > 0.1:
+            reason = "Posible sobreajuste"
+        elif test_score < best_score - 0.1:
+            reason = "Rendimiento bajo"
+        elif test_score < best_score - 0.05:
+            reason = "Rendimiento moderado"
+        else:
+            reason = "Subóptimo"
+        
+        params_str = str(params)
+        if len(params_str) > 48:
+            params_str = params_str[:45] + "..."
+        
+        print(f"{params_str:<50} | {test_score:.4f}    | {train_score:.4f}    | {diff:.4f}     | {reason}")
+    
+    # Guardar los resultados en un archivo CSV para referencia futura
+    timestamp = pd.Timestamp.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"hyperparameter_selection_{model_name.replace(' ', '_')}_{timestamp}.csv"
+    filepath = os.path.join(project_root, 'logs', filename)
+    
+    # Asegurar que el directorio logs exista
+    os.makedirs(os.path.join(project_root, 'logs'), exist_ok=True)
+    
+    # Guardar todos los resultados (no solo la muestra)
+    results.to_csv(filepath, index=False)
+    print(f"\nResultados completos guardados en: {filepath}")
 
 # Optimizar hiperparámetros
 best_lr, best_knn = optimize_hyperparameters(X_train_scaled, y_train)
